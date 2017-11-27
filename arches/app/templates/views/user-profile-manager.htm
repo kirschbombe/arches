@@ -395,6 +395,11 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
                                                             <!--/ko-->
                                                         </li>
                                                         <!--/ko-->
+                                                        <!--ko if: project.resources().length === 0 -->
+                                                        <li class="">
+                                                            <div>{% trans 'No forms added' %}</div>
+                                                        </li>
+                                                        <!--/ko-->
                                                     </ul>
                                             </div>
 
