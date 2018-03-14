@@ -16,6 +16,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.forms.models import model_to_dict
 from django.contrib.gis.geos import GEOSGeometry
 from django.core.files import File
+from django.core.cache import caches, cache
 
 class UnableToSerializeError(Exception):
     """ Error for not implemented classes """
@@ -82,6 +83,11 @@ class JSONSerializer(object):
             return self.handle_list(object)
         elif isinstance(object, Model):
             if hasattr(object, 'serialize'):
+                cached_object = cache.get(str(object.pk))
+                if cached_object is None:
+                    cached_object = cache.get(str(object.pk) + '_nodegroup')
+                if cached_object is not None:
+                    object = cached_object
                 exclude = self.exclude
                 return self.handle_object(getattr(object, 'serialize')(fields, exclude), fields, exclude)
             else:
