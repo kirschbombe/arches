@@ -45,6 +45,8 @@ from arches.app.views.base import BaseManagerView, MapBaseManagerView
 from tempfile import NamedTemporaryFile
 from guardian.shortcuts import get_perms_for_model, assign_perm, get_perms, remove_perm, get_group_perms, get_user_perms
 from rdflib import Graph as RDFGraph, RDF, RDFS
+from django.core.cache import caches, cache
+
 
 try:
     from cStringIO import StringIO
@@ -61,6 +63,30 @@ def get_ontology_namespaces():
             ontology_namespaces[str(namespace[1])] = str(namespace[0])
     return ontology_namespaces
 
+def get_graph(graphid):
+    graph = cache.get(graphid)
+    if graph in (None, 'null'):
+        graph = Graph.objects.get(graphid=graphid)
+    else:
+        print "Using cached graph"
+    return graph
+
+def get_datatypes():
+    datatypes = cache.get('datatypes')
+    if datatypes in ('null', None):
+        datatypes = models.DDataType.objects.all()
+        datatypes = JSONSerializer().serialize(datatypes)
+        cache.set('datatypes', datatypes, 60 * 15)
+    return datatypes
+
+def get_card(cardid):
+    card = cache.get(cardid)
+    if card is None:
+        print 'getting card from get card'
+        card = Card.objects.get(cardid=cardid)
+    else:
+        print "Using cached card from get card"
+    return card
 
 class GraphBaseView(BaseManagerView):
     def get_context_data(self, **kwargs):
@@ -90,7 +116,7 @@ class MapGraphBaseView(MapBaseManagerView):
 @method_decorator(group_required('Graph Editor'), name='dispatch')
 class GraphSettingsView(GraphBaseView):
     def get(self, request, graphid):
-        self.graph = Graph.objects.get(graphid=graphid)
+        self.graph = get_graph(graphid)
         icons = models.Icon.objects.order_by('name')
         resource_graphs = models.GraphModel.objects.filter(Q(isresource=True)).exclude(graphid=settings.SYSTEM_SETTINGS_RESOURCE_MODEL_ID)
         resource_data = []
@@ -107,6 +133,7 @@ class GraphSettingsView(GraphBaseView):
 
         ontologies = models.Ontology.objects.filter(parentontology=None)
         ontology_classes = models.OntologyClass.objects.values('source', 'ontology_id')
+
 
         context = self.get_context_data(
             main_script='views/graph/graph-settings',
@@ -127,7 +154,7 @@ class GraphSettingsView(GraphBaseView):
         return render(request, 'views/graph/graph-settings.htm', context)
 
     def post(self, request, graphid):
-        graph = Graph.objects.get(graphid=graphid)
+        graph = get_graph(graphid)
         data = JSONDeserializer().deserialize(request.body)
         for key, value in data.get('graph').iteritems():
             if key in ['iconclass', 'name', 'author', 'description', 'isresource',
@@ -167,14 +194,16 @@ class GraphManagerView(GraphBaseView):
 
             return render(request, 'views/graph.htm', context)
 
-        self.graph = Graph.objects.get(graphid=graphid)
+        self.graph = get_graph(graphid)
         datatypes = models.DDataType.objects.all()
-        branch_graphs = Graph.objects.exclude(pk=graphid).exclude(isresource=True)
         if self.graph.ontology is not None:
-            branch_graphs = branch_graphs.filter(ontology=self.graph.ontology)
+            branch_graphs = Graph.objects.exclude(pk=graphid).exclude(isresource=True).filter(ontology=self.graph.ontology)
+        else:
+            branch_graphs = Graph.objects.exclude(pk=graphid).exclude(isresource=True)
         lang = request.GET.get('lang', settings.LANGUAGE_CODE)
         concept_collections = Concept().concept_tree(mode='collections', lang=lang)
         datatypes_json = JSONSerializer().serialize(datatypes, exclude=['iconclass','modulename','isgeometric'])
+        # datatypes_json = get_datatypes()
         context = self.get_context_data(
             main_script='views/graph/graph-manager',
             branches=JSONSerializer().serialize(branch_graphs, exclude=['cards','domain_connections', 'functions', 'cards', 'deploymentfile', 'deploymentdate']),
@@ -360,8 +389,9 @@ class CardManagerView(GraphBaseView):
 class CardView(MapGraphBaseView):
     def get(self, request, cardid):
         try:
-            card = Card.objects.get(cardid=cardid)
-            self.graph = Graph.objects.get(graphid=card.graph_id)
+            card = get_card(cardid)
+            # self.graph = Graph.objects.get(graphid=card.graph_id)
+            self.graph = get_graph(card.graph_id)
         except(Card.DoesNotExist):
             # assume the cardid is actually a graph id
             card = Card.objects.get(cardid=Graph.objects.get(graphid=cardid).get_root_card().cardid)

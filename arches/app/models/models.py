@@ -26,6 +26,9 @@ from django.dispatch import receiver
 from django.utils.translation import ugettext as _
 from django.contrib.auth.models import User
 from django.contrib.auth.models import Group
+from django.core.cache import caches, cache
+from arches.app.utils.betterJSONSerializer import JSONSerializer, JSONDeserializer
+
 
 # can't use "arches.app.models.system_settings.SystemSettings" because of circular refernce issue
 # so make sure the only settings we use in this file are ones that are static (fixed at run time)
@@ -383,6 +386,21 @@ class NodeGroup(models.Model):
             ('no_access_to_nodegroup', 'No Access'),
         )
 
+    def save(self, *args, **kwargs):
+        cache.set(str(self.nodegroupid) + '_nodegroup', self, None)
+        super(NodeGroup, self).save(*args, **kwargs) # Call the "real" save() method.
+
+    def serialize(self, fields=None, exclude=None):
+        """
+        serialize to a different form then used by the internal class structure
+
+        """
+        obj = cache.get(str(self.nodegroupid) + '_nodegroup')
+        if obj == None:
+            obj = self
+        ret = JSONSerializer().handle_model(obj)
+        return ret
+
 
 class Node(models.Model):
     """
@@ -425,24 +443,43 @@ class Node(models.Model):
         return str(self.nodeid) == str(self.nodegroup_id) and self.nodegroup is not None
 
     def get_relatable_resources(self):
-        relatable_resource_ids = [r2r.resourceclassfrom for r2r in Resource2ResourceConstraint.objects.filter(resourceclassto_id=self.nodeid)]
-        relatable_resource_ids = relatable_resource_ids + [r2r.resourceclassto for r2r in Resource2ResourceConstraint.objects.filter(resourceclassfrom_id=self.nodeid)]
+        relatable_resource_ids = cache.get(str(self.nodeid) + 'relatable_resources')
+        relatable_resource_ids = None
+        if relatable_resource_ids == None:
+            relatable_resource_ids = [r2r.resourceclassfrom for r2r in Resource2ResourceConstraint.objects.filter(resourceclassto_id=self.nodeid)]
+            relatable_resource_ids = relatable_resource_ids + [r2r.resourceclassto for r2r in Resource2ResourceConstraint.objects.filter(resourceclassfrom_id=self.nodeid)]
         return relatable_resource_ids
 
     def set_relatable_resources(self, new_ids):
-        old_ids = [res.nodeid for res in self.get_relatable_resources()]
+        old_ids = [str(res.nodeid) for res in self.get_relatable_resources()]
         for old_id in old_ids:
             if old_id not in new_ids:
                 Resource2ResourceConstraint.objects.filter(Q(resourceclassto_id=self.nodeid) | Q(resourceclassfrom_id=self.nodeid), Q(resourceclassto_id=old_id) | Q(resourceclassfrom_id=old_id)).delete()
         for new_id in new_ids:
-            if new_id not in old_ids:
+            if str(new_id) not in old_ids:
+                old_ids.append(str(new_id))
                 new_r2r = Resource2ResourceConstraint.objects.create(resourceclassfrom_id=self.nodeid, resourceclassto_id=new_id)
                 new_r2r.save()
+        cache.set(str(self.nodeid) + 'relatable_resources', old_ids, 60 * 15)
 
     class Meta:
         managed = True
         db_table = 'nodes'
 
+    def save(self, *args, **kwargs):
+        cache.set(self.nodeid, self, None)
+        super(Node, self).save(*args, **kwargs) # Call the "real" save() method.
+
+    def serialize(self, fields=None, exclude=None):
+        """
+        serialize to a different form then used by the internal class structure
+
+        """
+        obj = cache.get(self.nodeid)
+        if obj == None:
+            obj = self
+        ret = JSONSerializer().handle_model(obj)
+        return ret
 
 class Ontology(models.Model):
     ontologyid = models.UUIDField(default=uuid.uuid1, primary_key=True)

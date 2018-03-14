@@ -25,6 +25,7 @@ from arches.app.models.system_settings import settings
 from arches.app.search.mappings import prepare_search_index, delete_search_index
 from arches.app.utils.betterJSONSerializer import JSONSerializer, JSONDeserializer
 from django.utils.translation import ugettext as _
+from django.core.cache import caches, cache
 
 
 class Graph(models.GraphModel):
@@ -347,6 +348,7 @@ class Graph(models.GraphModel):
             if self.isresource:
                 prepare_search_index(self.graphid, create=True)
 
+        cache.set(str(self.graphid), self, None)
         return self
 
     def delete(self):
@@ -1028,13 +1030,36 @@ class Graph(models.GraphModel):
 
         """
 
-        nodegroups =set()
+        nodegroups = set()
         for node in self.nodes.itervalues():
             if node.is_collector:
-                nodegroups.add(node.nodegroup)
+                ng = cache.get(str(node.nodegroup_id) + '_nodegroup')
+                if ng is not None:
+                    nodegroups.add(ng)
+                else:
+                    nodegroups.add(node.nodegroup)
         for card in self.cards.itervalues():
-            nodegroups.add(card.nodegroup)
+            cng = cache.get(str(node.nodegroup_id) + '_nodegroup')
+            if cng is not None:
+                nodegroups.add(cng)
+            else:
+                nodegroups.add(card.nodegroup)
         return list(nodegroups)
+
+
+    # def get_nodegroups(self, nodegroupid=None):
+    #     """
+    #     get the nodegroups associated with this graph
+    #
+    #     """
+    #
+    #     nodegroups = set()
+    #     for node in self.nodes.itervalues():
+    #         if node.is_collector:
+    #             nodegroups.add(node.nodegroup)
+    #     for card in self.cards.itervalues():
+    #         nodegroups.add(card.nodegroup)
+    #     return list(nodegroups)
 
     def get_or_create_nodegroup(self, nodegroupid):
         """
@@ -1113,8 +1138,8 @@ class Graph(models.GraphModel):
         internal objects (like models.Nodes) don't support
 
         """
-        exclude = [] if exclude == None else exclude
 
+        exclude = [] if exclude == None else exclude
         ret = JSONSerializer().handle_model(self, fields, exclude)
         ret['root'] = self.root
 
@@ -1148,6 +1173,8 @@ class Graph(models.GraphModel):
             ret.pop('nodes', None)
 
         res = JSONSerializer().serializeToPython(ret)
+
+
 
         return res
 
