@@ -46,6 +46,7 @@ from arches.app.views.tileserver import seed_resource_cache
 from arches.management.commands import utils
 from arches.setup import get_elasticsearch_download_url, download_elasticsearch, unzip_file
 from arches.app.search.mappings import prepare_term_index, prepare_resource_relations_index
+from django.core.cache import caches, cache
 
 class Command(BaseCommand):
     """
@@ -471,6 +472,7 @@ class Command(BaseCommand):
 
         if setup_db != False:
             if setup_db.lower() in ('t', 'true', 'y', 'yes'):
+                cache.clear()
                 self.setup_db(settings.PACKAGE_NAME)
 
 
