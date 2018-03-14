@@ -76,6 +76,21 @@ LOGGING = {   'disable_existing_loggers': False,
 
 MEDIA_ROOT =  os.path.join(APP_ROOT)
 
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': os.path.join(APP_ROOT, 'tmp', 'djangocache'),
+        'TIMEOUT': 60 * 15, #15 minutes
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000
+        }
+    }
+    # 'default': {
+    #     'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+    #     'LOCATION': '127.0.0.1:11211',
+    # }
+}
+
 TILE_CACHE_CONFIG = {
     "name": "Disk",
     "path": os.path.join(APP_ROOT, 'tileserver', 'cache')

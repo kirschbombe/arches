@@ -375,10 +375,21 @@ USER_SIGNUP_GROUP = 'Crowdsource Editor'
 
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
-        'LOCATION': '127.0.0.1:11211',
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': os.path.join(ROOT_DIR, 'tmp', 'djangocache'),
+        'TIMEOUT': 60,
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000
+        }
     }
+    # 'memcached': {
+    #     'default': {
+    #         'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+    #         'LOCATION': '127.0.0.1:11211',
+    #     }
+    # }
 }
+
 
 #######################################
 ###       END STATIC SETTINGS       ###
@@ -447,9 +458,19 @@ CACHE_SEED_MAX_ZOOM = 5
 
 # configure where the tileserver should store its cache
 TILE_CACHE_CONFIG = {
-    "name": "Disk",
-    "path": os.path.join(ROOT_DIR, 'tileserver', 'cache')
+    #
 
+    "name": "Multi",
+    "tiers": [
+        {
+           "name": "Memcache",
+           "servers": ["127.0.0.1:11211"]
+        },
+        {
+            "name": "Disk",
+            "path": os.path.join(ROOT_DIR, 'tileserver', 'cache')
+        }
+    ]
     # to reconfigure to use S3 (recommended for production), use the following
     # template:
 
